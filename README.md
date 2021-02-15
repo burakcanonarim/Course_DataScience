@@ -1,4 +1,4 @@
-# Course_DataScience
+# Data Science and Analytics
 This repository is about a lecture which is named "Data Science and Analytics" at Mugla Sitki Kocman University. There are 3 sections:
 
   + Homework
