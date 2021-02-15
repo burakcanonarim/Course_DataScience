@@ -1,0 +1,449 @@
+---
+title: "Online Shoppers Intention Analysis"
+author: "Burak Can Onarım"
+date: "12/7/2020"
+output: html_document
+---
+
+---
+
+### Used Libraries
+```{r, message=FALSE, warning=FALSE}
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(ggthemes)
+library(factoextra)
+library(stats)
+library(cluster)
+```
+
+
+## Dataset Description
+
+The first step is read the CSV file,
+```{r read.file}
+shop.data <- read.csv("online_shoppers_intention.csv")
+```
+
+
+First of all, attribute names has to be known. So,
+```{r show.column.names}
+colnames(shop.data)
+```
+
+Some attribute names has to be changed for being more meaningful. So,
+```{r change.column.names}
+names(shop.data)[names(shop.data) == "Administrative"] <- "Account Page"
+names(shop.data)[names(shop.data) == "Administrative_Duration"] <- "Duration in Account Page"
+names(shop.data)[names(shop.data) == "Informational"] <- "Website Information Page"
+names(shop.data)[names(shop.data) == "Informational_Duration"] <- "Duration in Website Information Page"
+names(shop.data)[names(shop.data) == "ProductRelated"] <- "Product Page"
+names(shop.data)[names(shop.data) == "ProductRelated_Duration"] <- "Duration in Product Page"
+names(shop.data)[names(shop.data) == "BounceRates"] <- "Bounce Rate"
+names(shop.data)[names(shop.data) == "ExitRates"] <- "Exit Rate"
+names(shop.data)[names(shop.data) == "PageValues"] <- "Visited Page"
+names(shop.data)[names(shop.data) == "SpecialDay"] <- "Closeness to Special Day"
+
+names(shop.data)[names(shop.data) == "OperatingSystems"] <- "Operating System"
+names(shop.data)[names(shop.data) == "TrafficType"] <- "Traffic Type"
+names(shop.data)[names(shop.data) == "VisitorType"] <- "Visitor Type"
+names(shop.data)[names(shop.data) == "Weekend"] <- "is Weekend"
+names(shop.data)[names(shop.data) == "Revenue"] <- "is Revenue"
+```
+
+
+In the dataset which is called *online shoppers intention*, there are 18 attributes. 10 of them are numerical and the rest are categorical(6 attributes are character type and 2 attributes are boolean type), too.
+
++ **Numerical variables**
+
+  1. **Account.Page** (integer) - Number of pages visited by the visitor about account management
+  2. **Duration.in.Account.Page** (double) - Total amount of time (in seconds) spent by the visitor on account management related pages
+  3. **Website.Information.Page** (integer) -  Number of pages visited by the visitor about Web site, communication and address information of the shopping site
+  4. **Duration.in.Website.Information.Page** (double) - Total amount of time (in seconds) spent by the visitor on informational pages
+  5. **Product.Page** (integer) -  Number of pages visited by visitor about product related pages
+  6. **Duration.in.Product.Page** (double) - Total amount of time (in seconds) spent by the visitor on product related pages duration
+  7. **Bounce.Rate** (double) -  Average bounce rate value of the pages visited by the visitor
+  8. **Exit.Rate** (double) -  Average exit rate value of the pages visited by the visitor
+  9. **Visited.Page** (double) - Average page value of the pages visited by the visitor
+  10. **Closeness.to.Special.Day** (double) - Closeness of the site visiting time to a special day
+
+
+
++ **Categorical variables**
+
+  1. **Month** (character) - Month value of the visit date
+  2. **Operating.System** (integer) -  Operating system of the visitor
+  3. **Browser** (integer) - Browser of the visitor
+  4. **Region** (integer) -  Geographic region from which the session has been started by the visitor
+  5. **Traffic.Type** (integer) - Traffic source by which the visitor has arrived at the Web site (e.g., banner, SMS, direct)
+  6. **Visitor.Type** (character) -  Visitor type as ‘‘New Visitor,’’ ‘‘Returning Visitor,’’ and ‘‘Other’’
+  7. **is.Weekend** (logical) -  Boolean value indicating whether the date of the visit is weekend
+  8. **is.Revenue** (logical) - Class label indicating whether the visit has been finalized with a transaction
+
+## Data Preprocessing
+
+There are some preprocessing needed to provide a meaningful data. 
+
+For example, there are integer attributes in the categorical variables section. So, they have to be transform to factor.
+```{r transform.values, message=FALSE}
+shop.data <- transform(shop.data,
+                       Month =
+                         as.factor(
+                           mapvalues(
+                             Month,
+                             c("Jan", "Feb", "Mar", "Apr", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+                             c(1:12)
+                           )
+                         ),
+                       
+                       `Operating System` =
+                         as.factor(
+                           mapvalues(
+                             `Operating System`,
+                             c(1:8),
+                             c("os1", "os2", "os3", "os4", "os5", "os6", "os7", "os8")
+                           )
+                         ),
+                       
+                       Browser =
+                         as.factor(
+                           mapvalues(
+                             Browser,
+                             c(1:13),
+                             c("browser1", "browser2", "browser3", "browser4", "browser5", "browser6", "browser7", "browser8", "browser9", "browser10", "browser11", "browser12", "browser13")
+                           )
+                         ),
+                       
+                       Region =
+                         as.factor(
+                           mapvalues(
+                             Region,
+                             c(1:9),
+                             c("region1", "region2", "region3", "region4", "region5", "region6", "region7", "region8", "region9")
+                           )
+                         ),
+                       
+                       `Traffic Type` =
+                         as.factor(
+                           mapvalues(
+                            `Traffic Type`,
+                             c(1:20),
+                             c("type1", "type2", "type3", "type4", "type5", "type6", "type7", "type8", "type9", "type10", "type11", "type12", "type13", "type14", "type15", "type16", "type17", "type18", "type19", "type20")
+                           )
+                         ),
+                       
+                       `Visitor Type` =
+                         as.factor(
+                           mapvalues(
+                             `Visitor Type`,
+                             c("Returning_Visitor", "New_Visitor", "Other"),
+                             c("returning", "new", "other")
+                           )
+                         )
+                      )
+```
+
+And the result, dataset which represents with 6 rows is shown in below;
+```{r show.preprocessed.dataset}
+head(shop.data)
+```
+
+---
+
+# TASKS
+
+## Task 1 - Data Exploratory
+
+### Segmentation
+
+Before visualization, the main focus should be on segmentation to has a good research and exploratory. So, my segment on this dataset will be **returning visitors who are seen only the product pages on close to a special day**. To make it clear with code, there should be:
+
+  + Account.Page == 0
+  + Website.Information.Page == 0
+  + Product.Page != 0
+  + Closeness.to.Special.Day != 0
+  + Visitor.Type == "returning"
+
+Also, there is no need technical information such as *operating system*, *browser* and *traffic type*.
+```{r segmentation}
+only.product.on.special <- shop.data %>%
+  filter(Account.Page == 0,
+         Website.Information.Page == 0,
+         Product.Page != 0,
+         Closeness.to.Special.Day != 0,
+         Visitor.Type == "returning") %>%
+  select(Product.Page, Duration.in.Product.Page, Bounce.Rate, Exit.Rate, Closeness.to.Special.Day,Month, Region, is.Weekend, is.Revenue)
+```
+
+Let's see the first 6 rows for segmented dataset:
+
+```{r show.segmented.dataset}
+head(only.product.on.special)
+```
+
+### Visualization
+
+To understand dataset what it says easily, there should be some graphics about features. So, let's see first graph and this is about viewed product pages based on regions.
+
+##### Product Pages ~ Region
+```{r page.based.on.region}
+ggplot(only.product.on.special, aes(x = Region, y = Product.Page)) +
+  geom_bar(stat = "identity", width = .8, color = "#85BB65") +
+  theme_tufte() +
+  theme(plot.title = element_text(hjust = .5), 
+        axis.ticks = element_blank()) +
+  labs(title="Total Pages about Products based on Regions",
+       x = "Regions",
+       y = "Pages",
+       caption = "created by Burak Can Onarim")
+```
+As it is seen, there are 2 regions that can exceed 3000 level of viewed product pages. Also, there is no region that could reach 1500 level except region1 and region3.
+
+If I were a data scientist for dataset-owner, I would suggest to increase the sales target on region1 and region3.
+
+---
+
+## Task 2 - PCA
+
+My segmented dataset has 8 features and each features has 752 values. So, there is more dimensions than it should be. I will use principal component analysis and some process has to be done to do this analysis method.
+
+```{r do.integer}
+only.product.on.special <- transform(only.product.on.special,
+                                     Month =
+                                       as.integer(Month),
+                                     
+                                     Region =
+                                       as.integer(Region),
+                                     
+                                     is.Weekend =
+                                       as.integer(
+                                         mapvalues(
+                                           is.Weekend,
+                                           c(FALSE, TRUE),
+                                           c(0,1)
+                                           )
+                                         )
+                                     )
+```
+
+
+The segmented dataset is ready to do PCA:
+```{r do.pca}
+pc.analysis <- prcomp(only.product.on.special[, 1:8], center = TRUE, scale. = TRUE)
+```
+
+To see summary of analyzed principal components:
+```{r summary.pca}
+summary(pc.analysis)
+```
+As is seen, there are 8 principal components and first 5 ones can be used. I think 90,74% data can represents all segmented dataset and cumulative proportion of first 5 PCs provided this rate.
+
+Also, there is a plot for variances of first 6 principal components and it is in below:
+```{r screeplot.pca}
+screeplot(pc.analysis, type = "l", npcs = 6, main = "Screeplot of the first 6 PCs")
+abline(h = 1, col = "red", lty = 5)
+legend("topright", legend = c("Eigen-value = 1"),
+       col = c("red"), lty = 5, cex = .6)
+```
+
+```{r}
+plot(pc.analysis$x[, 1], pc.analysis$x[, 2],
+     xlab = "PC1 (33%)", ylab = "PC2 (19%)", main = "PC1 / PC2 - plot")
+```
+
+
+Then, there is requirement for plotting of PCA based on Weekend feature. This feature transforms to factor from integer. So:
+```{r do.factor.isWeekend}
+only.product.on.special <- transform(only.product.on.special,
+                                     is.Weekend =
+                                       as.factor(
+                                         mapvalues(
+                                           is.Weekend,
+                                           c(0:1),
+                                           c("FALSE", "TRUE")
+                                         )
+                                       )
+                                     )
+```
+
+
+Finally, this is a plot code and plot is in below:
+```{r fviz_pca_ind.weekend}
+fviz_pca_ind(pc.analysis,
+             geom.ind = "point",
+             pointshape = 21, 
+             pointsize = 2, 
+             fill.ind = only.product.on.special$is.Weekend,
+             addEllipses = TRUE,
+             col.var = "black",
+             repel = TRUE,
+             legend.title = "is Weekend?") +
+  ggtitle("2D PCA-plot from 8 features dataset") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+As is seen,
+
+  + x-axis and y-axis are for PC1 and PC2, respectively.
+  + probability of be weekend increases when level of PC2 values increases.
+  + There are no data after 5.0 level for PC1 on weekends. In other words, PC1 value has more than 5.0 if only weekdays.
+ 
+---
+ 
+## Task 3 - Clustering
+
+First step is the features going back to integer type. So,
+```{r go.back.integer}
+only.product.on.special <- transform(only.product.on.special,
+                                     is.Weekend = as.integer(is.Weekend) - 1)
+```
+
+
+#### K-Means
+
+Let's create 5 centroids and create a model with it. Also, there is a plot based on these centroids.
+```{r create.kmeans.model}
+set.seed(101)
+
+km <- only.product.on.special[, 1:8] %>%
+  kmeans(centers = 3)
+
+plot(pc.analysis$x[, 1], pc.analysis$x[, 2],
+     xlab = "PC1 (33%)", ylab = "PC2 (19%)", main = "PC1 / PC2 - plot",
+     col = km$cluster)
+```
+
+See the model;
+```{r km.model}
+km
+```
+As the results, the centroids size is in below;
+
+  + Centroid 1: 155
+  + Centroid 2: 30
+  + Centroid 3: 567
+
+Also, there are some statistical information about this model in output section.
+
+
+As is seen easily, there is a table about clusters and regions:
+```{r table.km.regions}
+table(cluster= km$cluster, "is Revenue?" = only.product.on.special$is.Revenue)
+```
+
+The plot of segmented dataset with clusters:
+```{r plot.model.on.dataset}
+fviz_cluster(km, data = only.product.on.special[, 1:8])
+```
+
+
+Final step is finding the optimal cluster numbers:
+```{r optimal.number.of.clusters}
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(df, k, nstart = 10 )$tot.withinss
+}
+
+# extract wss for 2-15 clusters
+fviz_nbclust(only.product.on.special[, 1:8], kmeans, method = "wss")
+```
+
+
+
+#### Hierchical Clustering
+
+As in K-means, There is a plot to find optimal number of clusters;
+```{r optimal.clusters.in.hc}
+#Agglomerative hierarchical clustering (HC)---hclust function
+distance <- dist(only.product.on.special[, 1:8], method = "euclidean")
+
+#Elbow method can also be used here
+fviz_nbclust(only.product.on.special[, 1:8], FUN = hcut, method = "wss")
+```
+This plot is same in k-means, completely.
+
+
+
+This is a code to draw a plot of cluster dendogram and its k = 2
+```{r}
+hier <- hclust(distance, method = "average")
+plot(hier) 
+rect.hclust(hier, k = 2, border = "red")
+```
+As is seen, there are a lot of clusters in this dendogram.
+
+
+Prediction of is.Revenue:
+```{r}
+hier_cut <- cutree(hier, 2)
+table(predicted = hier_cut, true = only.product.on.special$is.Revenue)
+```
+
+---
+
+This is a code to draw a plot of cluster dendogram and its k = 3
+```{r}
+plot(hier) 
+rect.hclust(hier, k=3, border="red")
+```
+As is seen, there are a lot of clusters in this dendogram, again.
+
+
+
+Prediction of is.Revenue:
+```{r}
+hier_cut <- cutree(hier, 3)
+table(predicted = hier_cut, true = only.product.on.special$is.Revenue)
+```
+
+---
+
+This is a code to draw a plot of cluster dendogram and its k = 4
+```{r}
+plot(hier) 
+rect.hclust(hier, k=4, border="red")
+```
+
+Prediction of is.Revenue:
+```{r}
+hier_cut <- cutree(hier, 4)
+table(predicted = hier_cut, true = only.product.on.special$is.Revenue)
+```
+
+---
+
+##### Dendogram of Diana
+
+Create a model of diana:
+```{r}
+#Divisive hierarchical clustering (HC)---diana function
+hier_diana <- diana(only.product.on.special[, 1:8])
+
+# Divisive  coefficient; amount of clustering structure found
+hier_diana$dc
+```
+divisive coefficient of this model is: **0.9977737**
+
+
+To draw a dendogram of Diana:
+```{r}
+pltree(hier_diana, cex = 0.6, hang = -1, main = "Dendrogram of diana")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

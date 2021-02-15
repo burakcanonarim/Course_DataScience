@@ -1,0 +1,244 @@
+---
+title: "First Quiz for CENG 4515"
+author: "Burak Can Onarım"
+date: "1 November 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Libraries
+```{r, error=FALSE, warning=FALSE, message=FALSE}
+library(skimr)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+```
+
+
+## Q1 - Import the Dataset
+I've downloaded the csv file and this file is used with **read.csv()** function.
+```{r}
+heroes.info <- read.csv("C:/Users/burak/Downloads/heroes_information.csv")
+```
+
+I provide that some information about the dataset as called *heroes.info* with **skim()** function.
+```{r}
+skim(heroes.info)
+```
+
+
+## Q2 - Males Characters with Blue Eyes
+```{r}
+# filter() function to find males who have blue eyes
+males.blue.eyes <- filter(heroes.info, Gender == "Male" & Eye.color == "blue")
+
+# nrow() function to see how many rows
+nrow(males.blue.eyes)
+```
+=> And the result of this question is **143**.
+
+## Q3 - Remove Bad Alignments
+
+There are some **bad** values for column as named **Alignment** and I delete them.
+```{r}
+# To delete bad alignment rows
+no.bad.alignment.heroes.info <- heroes.info[!(heroes.info$Alignment == "bad"), ]
+```
+
+Then, I find the number of males who have blue eyes, again!
+```{r}
+# filter() function to find males who have blue eyes
+males.blue.eyes.for.no.bad.alignment <- filter(no.bad.alignment.heroes.info,
+                                               Gender == "Male" & Eye.color == "blue")
+
+# nrow() function to see how many rows
+nrow(males.blue.eyes.for.no.bad.alignment)
+```
+=> And the result of this question is **108**.
+
+## Q4 - Summary Table for Most Common Race and Skin Color
+
+In dataset, there are many non-valued values and they are assigned with dash character(-). I transform these values with ***NA*** for Race and Skin.color columns.
+```{r}
+# Transform process
+no.dash.for.race.and.skin.color <-
+  mutate(heroes.info,
+         Race = ifelse(Race == "-", NA, Race),
+         Skin.color = ifelse(Skin.color == "-", NA, Skin.color))
+
+# Summary table
+stats.for.q4 <- summarise(no.dash.for.race.and.skin.color,
+                          "MOST COMMON RACE" = names(which.max(table(Race))),
+                          "MOST COMMON SKIN COLOR" = names(which.max(table(Skin.color))))
+
+# Good visualization for Markdown
+kable(stats.for.q4, align = "cc")
+```
+
+
+## Q5 - Mean and SD for Height AND Weight
+
+There are many non-sense values for height and weight columns. For example, there are some **-99** values and this is not possible, logically. So, I transform these values with ***NA***.
+```{r}
+# Transform process
+no.minus.for.height.and.weight <-
+  mutate(heroes.info,
+         Height = ifelse(Height <= 0, NA, Height),
+         Weight = ifelse(Weight <= 0, NA, Weight))
+```
+
+Then the process of calculations for mean and standard deviations:
+```{r}
+# Mean value for Height
+mean(no.minus.for.height.and.weight$Height, na.rm = TRUE)
+```
+=> And the result is **186.7263**.
+
+```{r}
+# Mean value for Weight
+mean(no.minus.for.height.and.weight$Weight, na.rm = TRUE)
+```
+=> And the result is **112.2525**.
+
+```{r}
+# Standard Deviation for Height
+sd(no.minus.for.height.and.weight$Height, na.rm = TRUE)
+```
+=> And the result is **59.25189**.
+
+
+```{r}
+# Standard Deviation for Height
+sd(no.minus.for.height.and.weight$Weight, na.rm = TRUE)
+```
+=> And the result is **104.1511**.
+
+
+```{r}
+no.minus.for.height.and.weight[order(no.minus.for.height.and.weight$Height,
+                                     decreasing = TRUE), "name"][1]
+```
+=> And the most tallest hero is **Fin Fang Foom**.
+
+
+```{r}
+no.minus.for.height.and.weight[order(no.minus.for.height.and.weight$Height,
+                                     decreasing = FALSE), "name"][1]
+```
+=> And the most smallest hero is **Utgard-Loki**.
+
+
+## Q6 - Creating a Tibble and Comparing Mean and Standard Deviation
+First of all, I choose a required columns and they are **Alignment**, **Height** and **Weight**. Then, I filter the Alignment with ***good or bad***. Final step is convert type to tibble from dataframe, too.
+```{r}
+# Good or Bad Heroes with Required Columns
+good.or.bad <- no.minus.for.height.and.weight %>%
+  select(Alignment, Weight, Height) %>%
+  filter(Alignment == "good" | Alignment == "bad")
+
+# To change tibble from data.frame
+tibble.q6 <- as_tibble(good.or.bad)
+
+# To show it
+head(tibble.q6)
+```
+
+It's time to compare values for height and weight.
+```{r, error=FALSE, warning=FALSE, message=FALSE}
+comparing <- tibble.q6 %>% group_by("Alignment" = Alignment) %>%
+  summarise("Mean of Weight" = round(mean(Weight, na.rm = TRUE), digits = 4),
+            "Mean of Height" = round(mean(Height, na.rm = TRUE), digits = 4),
+            "Standard Deviation of Weight" = round(sd(Weight, na.rm = TRUE), digits = 4),
+            "Standard Deviation of Height" = round(sd(Height, na.rm = TRUE), digits = 4))
+
+kable(comparing, align = "lcccc")
+```
+
+## Q7 - Combining two Dataframes and Visualization Part
+
+I've downloaded the csv file and this file is used with **read.csv()** function.
+```{r}
+heroes.powers <- read.csv("C:/Users/burak/Downloads/super_hero_powers.csv")
+
+skim(heroes.powers)
+```
+
+And then, the two different datasets are combined using **inner_join()** function.
+```{r}
+# Based on hero names
+total.heroes <- inner_join(heroes.info, heroes.powers, c("name" = "hero_names"))
+
+# To unnecessary column as named 'X'
+total.heroes <- total.heroes[, -1]
+```
+
+Also I have to add a new column.
+```{r}
+# To create a column for Super Power Score
+total.heroes$Power <- NA
+```
+
+
+The hardest challenge is creating a function for calculation of power score.
+```{r}
+calculate.power <- function(data, idx = 1) {
+  
+  list.power <- c() # empty list
+  
+  # for every rows
+  for(i in 1:(nrow(data))) {
+    power = 0 # power is zero in the beginning
+    # for every columns
+    for (j in idx:(ncol(data) - 1)) {
+      if(data[i, j] == "True") {
+        power = power + 10 # Ten points if hero has power
+      }
+    }
+    # To append the power score of hero
+    list.power <- c(list.power, power)
+  }
+  
+  return(list.power) # return to list
+}
+```
+
+After the hardest part, adding values to created column.
+```{r}
+total.heroes$Power <- calculate.power(total.heroes, 11)
+```
+
+To show new dataset without unnecessary columns.
+```{r}
+head(total.heroes[, -(11:177)])
+```
+
+The required filter is;
+
+ * Gender is **Female**
+ * Race is **Human**
+ * and the sensible alignment values(i.e. except **-**)
+```{r}
+q7.filter <- total.heroes %>%
+  filter(Gender=="Female" & Race =="Human" & Alignment != "-")
+```
+
+
+I think the boxplot is best-fit visualization for this question and ggplot2 library is used.
+```{r}
+ggplot(q7.filter) + geom_boxplot(mapping = aes(x = Alignment, y = Power)) +
+  scale_y_continuous(breaks = seq(40, 190, 30)) +
+  labs(title = "Power Scores based on Alignments",
+       subtitle =  "using boxplot",
+       x = "Alignments", y = "Power Score",
+       caption = "Created by Burak Can Onarım in 01.11.2020")
+```
+
+I departed the my inferences based on alignments. So;
+
+ + **Bad:** The mean is the highest but first and third quartile are lower than *Good* heroes. So, minimum and maximum scores are higher than others.
+ + **Good:** The mean is good enough. Also, the minimum score is the lowest. As the final stuff, mean is closer to first quartile than third quartile, it is understood that many values are lower.
+ + **Neutral:** There are no many words left to speak. Their scores very bad and mean is midmost between first and third quartile.

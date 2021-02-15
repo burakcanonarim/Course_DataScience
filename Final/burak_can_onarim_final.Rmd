@@ -1,0 +1,217 @@
+---
+title: "Final Project"
+author: "Burak Can Onarim"
+date: "1/18/2021"
+output: html_document
+---
+```{r}
+package.installer <- function(package.list) {
+  required.packages <- package.list # Required packages to use in project
+
+  for (i in required.packages) { #Installs packages if not yet installed
+    if (!require(i, character.only = TRUE)) install.packages(i)
+  }
+  rm(required.packages)
+}
+
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+packages <- c('tidyverse', 'plyr', 'dplyr', 'readxl', 'jsonlite', 'AppliedPredictiveModeling', 'caret', 'skimr', 'RANN', 'randomForest', 'fastAdaboost', 'gbm', 'xgboost', 'caretEnsemble', 'C50', 'earth', 'ellipse', 'naivebayes')
+package.installer(packages)
+rm(packages)
+```
+
+
+```{r}
+data.import <- function(filePath, fileFormat = 'csv') {
+  
+  # File format can detect automatically using parsing.
+  
+  # If there is no acceptable file format, then return an error message
+  if (fileFormat != 'csv' && fileFormat != 'excel' && fileFormat != 'txt' && fileFormat != 'json') {
+    return("Please choose correct file format!")
+  }
+  else {
+    if (fileFormat == 'csv') { # If file is a CSV
+      data <- filePath %>% read.csv()
+      return(data)
+    }
+    if (fileFormat == 'excel') { # If file is an Excel sheet
+      data <- filePath %>% read_excel()
+      return(data)
+    }
+    if (fileFormat == 'txt') { # If file is a simple text
+      data <- filePath %>% read.delim()
+      return(data)
+    }
+    if (fileFormat == 'json') { # If file is a JSON
+      data <- filePath %>% fromJSON() %>% as.data.frame
+      return(data)
+    }
+  }
+}
+
+```
+
+```{r import}
+myPath <- "online_shoppers_intention.csv"
+online.shoppers <- myPath %>% data.import()
+rm(myPath)
+```
+
+
+```{r}
+data.exploration <- function(dataset, x.idx, y.idx, plot.col = 1, plot.row = 1) {
+  
+  print(summary(dataset)) # To find quantile points with average value
+  cat("\n")
+  str(dataset) # To check type of columns
+  dataset[, y.idx] <- as.factor(dataset[, y.idx])
+  
+  density.plot <- featurePlot(x = dataset[, x.idx], 
+                              y = dataset[, y.idx],
+                              plot = "density", 
+                              ## Pass in options to xyplot() to 
+                              ## make it prettier
+                              scales = list(x = list(relation = "free"), 
+                                            y = list(relation = "free")), 
+                              adjust = 1.5, 
+                              pch = "|", 
+                              layout = c(plot.row, plot.col), 
+                              auto.key = list(columns = nlevels(dataset[, y.idx])))
+  
+  box.plot <- featurePlot(x = dataset[, x.idx], 
+                          y = dataset[, y.idx], 
+                          plot = "box", 
+                          ## Pass in options to bwplot() 
+                          scales = list(y = list(relation = "free"),
+                                        x = list(rot = 90)),  
+                          layout = c(plot.row, plot.col), 
+                          auto.key = list(columns = nlevels(dataset[, y.idx])))
+
+
+  plot.list <- list(density.plot, box.plot)
+  
+  return(plot.list)
+}
+
+```
+
+```{r exploration}
+data.exploration(online.shoppers, x.idx = c(1:10, 12:15, 17), y.idx = 18, plot.row = 5, plot.col = 3)
+```
+
+
+```{r}
+data.preprocessing <- function(dataset, categorical.idx, target.idx, split.rate = .8, dummy.formula) {
+  set.seed(100)
+  if (is.numeric(categorical.idx)) {
+    for (i in categorical.idx) {
+      dataset[, i] <- as.factor(dataset[, i])
+    }
+  }
+  
+  trainRowNumbers <- createDataPartition(dataset[, target.idx], p = split.rate, list = FALSE)
+  trainData <- dataset[trainRowNumbers,]
+  testData <- dataset[-trainRowNumbers,]
+  
+  x = trainData[, -target.idx]
+  y = trainData[, target.idx]
+  names(y)[1] <- colnames(dataset)[target.idx]
+  
+  if (anyNA(trainData)) {
+    preProcess_missingdata_model <- preProcess(trainData, method='knnImpute')
+    preProcess_missingdata_model
+    trainData <- predict(preProcess_missingdata_model, newdata = trainData)
+  } else {
+    print("There is no NA in your dataset!")
+  }
+  
+  dummies_model <- dummyVars(dummy.formula, data = trainData)
+  trainData_mat <- predict(dummies_model, newdata = trainData)
+  trainData <- data.frame(trainData_mat)
+  cat("\nTrain Data after utilization of dummy variables\n")
+  str(trainData)
+  cat("\n")
+  
+  preProcess_range_model <- preProcess(trainData, method = 'range')
+  trainData <- predict(preProcess_range_model, newdata = trainData)
+  trainData[, length(colnames(trainData)) + 1] <- y
+  names(trainData)[length(colnames(trainData))] <- colnames(dataset)[target.idx]
+
+  apply(trainData[, -length(colnames(trainData))], 2, FUN=function(x){c('min'=min(x), 'max'=max(x))})
+
+  
+  #feature.plot.box <- featurePlot(x = trainData[, -length(colnames(trainData))], 
+  #                                y = as.factor(trainData[, length(colnames(trainData))]), 
+  #                                plot = "box",
+  #                                strip=strip.custom(par.strip.text=list(cex=.7)),
+  #                                scales = list(x = list(relation="free"), 
+  #                                              y = list(relation="free")))
+  
+  #feature.plot.density <- featurePlot(x = trainData[, -length(colnames(trainData))], 
+  #                                    y = as.factor(trainData[, length(colnames(trainData))]), 
+  #                                    plot = "density",
+  #                                    strip=strip.custom(par.strip.text=list(cex=.7)),
+  #                                    scales = list(x = list(relation="free"), 
+  #                                                  y = list(relation="free")))
+  
+  #new.plot.list <- list(feature.plot.box, feature.plot.density)
+  #return(new.plot.list)
+  
+  return.list <- list('trainData' = as.data.frame(trainData), 'testData' = as.data.frame(testData))
+  return(return.list)
+  
+  
+
+}
+
+```
+
+```{r preprocess}
+train.and.test <- data.preprocessing(online.shoppers, categorical.idx = 11:17, target.idx = 18, dummy.formula = "Revenue ~ .")
+
+train.and.test
+```
+
+
+```{r}
+training <- function(train.data, train.formula) {
+  set.seed(100)
+  
+  # Define the training control
+  #fitControl <- trainControl(method = 'cv',number = 10) 
+  
+  model_knn = train(train.formula, data = train.data, method = 'knn')
+  return(model_knn)
+  #model_nb = train(train.formula, data = train.data, method = 'naive_bayes')
+  #model_lda = train(train.formula, data = train.data, method = 'lda')
+  #model_tree = train(train.formula, data = train.data, method = 'rpart')
+  #model_adaboost = train(train.formula, data = train.data, method = 'adaboost')
+  #model_rf = train(train.formula, data = train.data, method = 'rf')
+  
+  #model.list <- list(model_knn, model_nb, model_lda, model_tree, model_adaboost, model_rf)
+  #return(model.list)
+}
+
+```
+
+```{r}
+models <- training(train.data = train.and.test$trainData, train.formula = Revenue ~ .)
+```
+
+
+```{r}
+testing.and.comparison <- function(test.data) {
+  
+}
+
+```
+
+```{r}
+
+```
+
+
+
